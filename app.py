@@ -33,6 +33,20 @@ st.set_page_config(
 def inject_custom_css():
     st.markdown("""
         <style>
+            /* Hide Streamlit Default Top Header, Fork & GitHub Icons, and Footer */
+            header[data-testid="stHeader"] {
+                display: none !important;
+            }
+            div[data-testid="stToolbar"] {
+                display: none !important;
+            }
+            #MainMenu {
+                visibility: hidden !important;
+            }
+            footer {
+                visibility: hidden !important;
+            }
+
             /* Base Theme Tweaks */
             .main {
                 background-color: #0F172A;
