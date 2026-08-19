@@ -33,11 +33,29 @@ st.set_page_config(
 def inject_custom_css():
     st.markdown("""
         <style>
-            /* Hide Streamlit Default Top Header, Fork & GitHub Icons, and Footer */
+            /* Make top header transparent and keep sidebar expand control button visible */
             header[data-testid="stHeader"] {
+                background: transparent !important;
+                z-index: 99 !important;
+            }
+            
+            /* Ensure the sidebar toggle / expand button is ALWAYS visible when menu is closed */
+            [data-testid="stSidebarCollapsedControl"] {
+                display: flex !important;
+                visibility: visible !important;
+                color: #60A5FA !important;
+                background-color: #1E293B !important;
+                border-radius: 8px !important;
+                padding: 4px !important;
+                margin: 8px !important;
+                border: 1px solid rgba(59, 130, 246, 0.4) !important;
+            }
+
+            /* Hide ONLY the top-right toolbar (Fork, GitHub icons, 3 dots menu) and footer */
+            div[data-testid="stToolbar"] {
                 display: none !important;
             }
-            div[data-testid="stToolbar"] {
+            div[data-testid="stDecoration"] {
                 display: none !important;
             }
             #MainMenu {
