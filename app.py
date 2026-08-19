@@ -33,15 +33,19 @@ st.set_page_config(
 def inject_custom_css():
     st.markdown("""
         <style>
-            /* Make top header transparent so header buttons remain accessible */
+            /* Make header container click-through so it does not intercept clicks */
             header[data-testid="stHeader"] {
                 background: transparent !important;
                 z-index: 99999 !important;
+                pointer-events: none !important;
             }
             
-            /* Fix position of sidebar expand button in top-left corner when menu is collapsed */
+            /* Enable pointer-events & fix position for all sidebar expand/collapse button selectors */
             [data-testid="stSidebarCollapsedControl"],
-            [data-testid="stSidebarExpandButton"] {
+            [data-testid="stSidebarExpandButton"],
+            [data-testid="collapsedControl"],
+            header[data-testid="stHeader"] button {
+                pointer-events: auto !important;
                 display: flex !important;
                 visibility: visible !important;
                 opacity: 1 !important;
@@ -59,7 +63,9 @@ def inject_custom_css():
             }
 
             [data-testid="stSidebarCollapsedControl"]:hover,
-            [data-testid="stSidebarExpandButton"]:hover {
+            [data-testid="stSidebarExpandButton"]:hover,
+            [data-testid="collapsedControl"]:hover,
+            header[data-testid="stHeader"] button:hover {
                 background-color: #2563EB !important;
                 color: #FFFFFF !important;
             }
