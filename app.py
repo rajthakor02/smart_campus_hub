@@ -33,28 +33,39 @@ st.set_page_config(
 def inject_custom_css():
     st.markdown("""
         <style>
-            /* Make header container click-through so it does not intercept clicks */
+            /* Keep Streamlit's header available for its native controls. */
             header[data-testid="stHeader"] {
                 background: transparent !important;
                 z-index: 99999 !important;
-                pointer-events: none !important;
             }
             
             /* Keep Streamlit's native sidebar toggle in its own layout flow. */
+            [data-testid="stSidebarCollapseButton"],
             [data-testid="stSidebarCollapsedControl"],
             [data-testid="stSidebarExpandButton"],
-            [data-testid="collapsedControl"] {
+            [data-testid="collapsedControl"],
+            [data-testid="stExpandSidebarButton"] {
                 pointer-events: auto !important;
                 display: flex !important;
                 visibility: visible !important;
                 z-index: 999999 !important;
             }
 
+            [data-testid="stExpandSidebarButton"] {
+                position: fixed !important;
+                top: 16px !important;
+                left: 8px !important;
+                width: 32px !important;
+                height: 32px !important;
+            }
+
+            [data-testid="stSidebarCollapseButton"] button,
             [data-testid="stSidebarCollapsedControl"] button,
             [data-testid="stSidebarExpandButton"] button,
             [data-testid="collapsedControl"] button,
-            header[data-testid="stHeader"] button {
+            [data-testid="stExpandSidebarButton"] {
                 pointer-events: auto !important;
+                display: flex !important;
                 visibility: visible !important;
                 opacity: 1 !important;
                 background-color: #1E293B !important;
@@ -66,19 +77,27 @@ def inject_custom_css():
                 cursor: pointer !important;
             }
 
+            [data-testid="stExpandSidebarButton"] {
+                position: fixed !important;
+                top: 16px !important;
+                left: 8px !important;
+                width: 32px !important;
+                height: 32px !important;
+            }
+
+            [data-testid="stSidebarCollapseButton"]:hover,
+            [data-testid="stSidebarCollapseButton"] button:hover,
             [data-testid="stSidebarCollapsedControl"]:hover,
             [data-testid="stSidebarExpandButton"]:hover,
             [data-testid="collapsedControl"]:hover,
             [data-testid="stSidebarCollapsedControl"] button:hover,
             [data-testid="stSidebarExpandButton"] button:hover,
-            [data-testid="collapsedControl"] button:hover,
-            header[data-testid="stHeader"] button:hover {
+            [data-testid="collapsedControl"] button:hover {
                 background-color: #2563EB !important;
                 color: #FFFFFF !important;
             }
 
             /* Hide ONLY the top-right toolbar (Fork icon, GitHub link, 3 dots menu) and footer */
-            [data-testid="stToolbar"],
             [data-testid="stDecoration"],
             [data-testid="stStatusWidget"],
             #MainMenu,
