@@ -40,19 +40,23 @@ def inject_custom_css():
                 pointer-events: none !important;
             }
             
-            /* Enable pointer-events & fix position for all sidebar expand/collapse button selectors */
+            /* Keep Streamlit's native sidebar toggle in its own layout flow. */
             [data-testid="stSidebarCollapsedControl"],
             [data-testid="stSidebarExpandButton"],
-            [data-testid="collapsedControl"],
-            header[data-testid="stHeader"] button {
+            [data-testid="collapsedControl"] {
                 pointer-events: auto !important;
                 display: flex !important;
                 visibility: visible !important;
-                opacity: 1 !important;
-                position: fixed !important;
-                top: 14px !important;
-                left: 14px !important;
                 z-index: 999999 !important;
+            }
+
+            [data-testid="stSidebarCollapsedControl"] button,
+            [data-testid="stSidebarExpandButton"] button,
+            [data-testid="collapsedControl"] button,
+            header[data-testid="stHeader"] button {
+                pointer-events: auto !important;
+                visibility: visible !important;
+                opacity: 1 !important;
                 background-color: #1E293B !important;
                 border: 2px solid #3B82F6 !important;
                 border-radius: 8px !important;
@@ -65,6 +69,9 @@ def inject_custom_css():
             [data-testid="stSidebarCollapsedControl"]:hover,
             [data-testid="stSidebarExpandButton"]:hover,
             [data-testid="collapsedControl"]:hover,
+            [data-testid="stSidebarCollapsedControl"] button:hover,
+            [data-testid="stSidebarExpandButton"] button:hover,
+            [data-testid="collapsedControl"] button:hover,
             header[data-testid="stHeader"] button:hover {
                 background-color: #2563EB !important;
                 color: #FFFFFF !important;
