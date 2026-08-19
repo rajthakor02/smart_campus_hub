@@ -33,35 +33,35 @@ st.set_page_config(
 def inject_custom_css():
     st.markdown("""
         <style>
-            /* Make top header transparent and keep sidebar expand control button visible */
+            /* Make top header transparent so header buttons remain accessible */
             header[data-testid="stHeader"] {
                 background: transparent !important;
-                z-index: 99 !important;
+                z-index: 9999 !important;
             }
             
-            /* Ensure the sidebar toggle / expand button is ALWAYS visible when menu is closed */
-            [data-testid="stSidebarCollapsedControl"] {
+            /* Guarantee sidebar expand/collapse toggle button is ALWAYS visible */
+            [data-testid="stSidebarCollapsedControl"],
+            [data-testid="stSidebarExpandButton"],
+            [data-testid="stSidebarCollapseButton"],
+            header[data-testid="stHeader"] button:first-child {
                 display: flex !important;
                 visibility: visible !important;
+                opacity: 1 !important;
                 color: #60A5FA !important;
                 background-color: #1E293B !important;
                 border-radius: 8px !important;
                 padding: 4px !important;
-                margin: 8px !important;
-                border: 1px solid rgba(59, 130, 246, 0.4) !important;
+                margin: 6px !important;
+                border: 1px solid rgba(59, 130, 246, 0.5) !important;
             }
 
-            /* Hide ONLY the top-right toolbar (Fork, GitHub icons, 3 dots menu) and footer */
-            div[data-testid="stToolbar"] {
-                display: none !important;
-            }
-            div[data-testid="stDecoration"] {
-                display: none !important;
-            }
-            #MainMenu {
-                visibility: hidden !important;
-            }
+            /* Hide ONLY the top-right toolbar (Fork icon, GitHub link, 3 dots menu) and footer */
+            [data-testid="stToolbar"],
+            [data-testid="stDecoration"],
+            [data-testid="stStatusWidget"],
+            #MainMenu,
             footer {
+                display: none !important;
                 visibility: hidden !important;
             }
 
