@@ -36,23 +36,32 @@ def inject_custom_css():
             /* Make top header transparent so header buttons remain accessible */
             header[data-testid="stHeader"] {
                 background: transparent !important;
-                z-index: 9999 !important;
+                z-index: 99999 !important;
             }
             
-            /* Guarantee sidebar expand/collapse toggle button is ALWAYS visible */
+            /* Fix position of sidebar expand button in top-left corner when menu is collapsed */
             [data-testid="stSidebarCollapsedControl"],
-            [data-testid="stSidebarExpandButton"],
-            [data-testid="stSidebarCollapseButton"],
-            header[data-testid="stHeader"] button:first-child {
+            [data-testid="stSidebarExpandButton"] {
                 display: flex !important;
                 visibility: visible !important;
                 opacity: 1 !important;
-                color: #60A5FA !important;
+                position: fixed !important;
+                top: 14px !important;
+                left: 14px !important;
+                z-index: 999999 !important;
                 background-color: #1E293B !important;
+                border: 2px solid #3B82F6 !important;
                 border-radius: 8px !important;
-                padding: 4px !important;
-                margin: 6px !important;
-                border: 1px solid rgba(59, 130, 246, 0.5) !important;
+                padding: 4px 8px !important;
+                color: #60A5FA !important;
+                box-shadow: 0 4px 15px rgba(0, 0, 0, 0.5) !important;
+                cursor: pointer !important;
+            }
+
+            [data-testid="stSidebarCollapsedControl"]:hover,
+            [data-testid="stSidebarExpandButton"]:hover {
+                background-color: #2563EB !important;
+                color: #FFFFFF !important;
             }
 
             /* Hide ONLY the top-right toolbar (Fork icon, GitHub link, 3 dots menu) and footer */
