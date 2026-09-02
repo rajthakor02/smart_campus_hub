@@ -317,35 +317,68 @@ def inject_custom_css():
                 border-right: 1px solid var(--border);
             }
 
+            section[data-testid="stSidebar"] {
+                min-width: 266px !important;
+                max-width: 266px !important;
+            }
+
             section[data-testid="stSidebar"] .block-container {
-                padding: 2.5rem 1.1rem;
+                padding: 2.25rem 1.6rem;
             }
 
             section[data-testid="stSidebar"] hr { border-color: var(--border); }
 
             .sidebar-brand {
-                text-align: center;
-                padding: 10px 0 20px 0;
+                text-align: left;
+                padding: 10px 0 24px 0;
             }
 
             .sidebar-brand h1 {
                 margin: 0;
-                font-size: 1.5rem;
-                font-weight: 800;
+                color: var(--ink);
+                font-size: 1.18rem;
+                font-weight: 500;
+                letter-spacing: 0.38em;
             }
 
             .sidebar-brand span {
-                font-size: 0.82rem;
+                display: block;
+                margin-top: 8px;
+                font-size: 0.75rem;
                 color: var(--muted);
                 font-weight: 500;
+                letter-spacing: 0.08em;
+                word-spacing: 0.45em;
             }
 
             .sidebar-nav-label {
-                color: var(--muted);
-                font-size: 0.78rem;
-                font-weight: 700;
-                letter-spacing: 0.03em;
-                margin-bottom: 6px;
+                display: none;
+            }
+
+            section[data-testid="stSidebar"] hr {
+                margin: 0 0 22px 0;
+            }
+
+            section[data-testid="stSidebar"] .nav-link {
+                min-height: 46px;
+                padding: 0.7rem 0.75rem !important;
+                margin: 3px 0 !important;
+                border-radius: 12px !important;
+                font-size: 0.9rem !important;
+            }
+
+            section[data-testid="stSidebar"] .nav-link-selected {
+                background-color: var(--cream-soft) !important;
+                color: #1B2026 !important;
+                font-weight: 500 !important;
+            }
+
+            section[data-testid="stSidebar"] .nav-link-selected .icon {
+                color: #1B2026 !important;
+            }
+
+            section[data-testid="stSidebar"] .nav-link:hover {
+                background-color: var(--charcoal) !important;
             }
         </style>
     """, unsafe_allow_html=True)
@@ -356,19 +389,18 @@ inject_custom_css()
 with st.sidebar:
     st.markdown("""
         <div class="sidebar-brand">
-            <h1>🎓 Smart Campus</h1>
-            <span>AI Career &amp; Project Hub</span>
+            <h1>MOKOTO</h1>
+            <span>Learn&nbsp;&nbsp; Build&nbsp;&nbsp; Grow</span>
         </div>
     """, unsafe_allow_html=True)
 
     st.markdown("---")
-    st.markdown('<div class="sidebar-nav-label">NAVIGATION</div>', unsafe_allow_html=True)
     
     menu_options = [
-        "Dashboard Overview",
-        "Resume Parser & JD Matcher",
-        "AI Mock Interviewer",
-        "Project Directory Showcase"
+        "Dashboard",
+        "Resume Parser",
+        "AI Mock Interview",
+        "Project Showcase"
     ]
     menu_icons = ["house", "file-earmark-text", "mic", "grid"]
 
@@ -393,7 +425,7 @@ with st.sidebar:
                     "color": "#9BA3AC",
                     "--hover-color": "#2A333C",
                 },
-                "nav-link-selected": {"background-color": "#2A333C", "color": "#EDEAE3", "font-weight": "600"}
+                "nav-link-selected": {"background-color": "#EDE6D8", "color": "#1B2026", "font-weight": "500"}
             }
         )
     else:
@@ -429,7 +461,7 @@ def render_header_stats():
 render_header_stats()
 
 # Page Routing Logic
-if selected_menu == "Dashboard Overview":
+if selected_menu == "Dashboard":
     st.markdown("""
         <div class="hero-banner">
             <span class="hero-icon">🚀</span>
@@ -457,7 +489,7 @@ if selected_menu == "Dashboard Overview":
             </div>
         """, unsafe_allow_html=True)
         if st.button("Analyze", key="dash_go_resume"):
-            st.session_state["_nav_override"] = "Resume Parser & JD Matcher"
+            st.session_state["_nav_override"] = "Resume Parser"
             st.rerun()
 
     with d_col2:
@@ -473,7 +505,7 @@ if selected_menu == "Dashboard Overview":
             </div>
         """, unsafe_allow_html=True)
         if st.button("Start Session", key="dash_go_interview"):
-            st.session_state["_nav_override"] = "AI Mock Interviewer"
+            st.session_state["_nav_override"] = "AI Mock Interview"
             st.rerun()
 
     with d_col3:
@@ -489,22 +521,22 @@ if selected_menu == "Dashboard Overview":
             </div>
         """, unsafe_allow_html=True)
         if st.button("Browse Projects", key="dash_go_projects"):
-            st.session_state["_nav_override"] = "Project Directory Showcase"
+            st.session_state["_nav_override"] = "Project Showcase"
             st.rerun()
 
-elif selected_menu == "Resume Parser & JD Matcher":
+elif selected_menu == "Resume Parser":
     render_resume_parser_page(
         api_key=os.getenv("GEMINI_API_KEY", ""),
         provider="gemini",
         model_name=os.getenv("GEMINI_MODEL", "gemini-1.5-flash")
     )
 
-elif selected_menu == "AI Mock Interviewer":
+elif selected_menu == "AI Mock Interview":
     render_mock_interview_page(
         api_key=os.getenv("GEMINI_API_KEY", ""),
         provider="gemini",
         model_name=os.getenv("GEMINI_MODEL", "gemini-1.5-flash")
     )
 
-elif selected_menu == "Project Directory Showcase":
+elif selected_menu == "Project Showcase":
     render_project_directory_page()
