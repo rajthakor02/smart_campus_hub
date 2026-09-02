@@ -215,7 +215,7 @@ def inject_custom_css():
 
 inject_custom_css()
 
-# Sidebar Setup & API Configuration
+# Sidebar Setup
 with st.sidebar:
     st.markdown("""
         <div style="text-align: center; padding: 10px 0 20px 0;">
@@ -224,36 +224,6 @@ with st.sidebar:
         </div>
     """, unsafe_allow_html=True)
     
-    st.markdown("### ⚙️ AI Engine Setup")
-    
-    provider = st.radio(
-        "Select LLM Provider",
-        ["Google Gemini", "OpenAI"],
-        help="Select your AI API provider for resume parsing and mock interviewing."
-    )
-    
-    provider_key = "gemini" if "Gemini" in provider else "openai"
-    
-    # Check default env key
-    default_key = os.getenv("GEMINI_API_KEY" if provider_key == "gemini" else "OPENAI_API_KEY", "")
-    
-    api_key_input = st.text_input(
-        f"{provider} API Key",
-        value=default_key,
-        type="password",
-        help=f"Enter your {provider} API key. If left blank, the app uses intelligent fallback AI engines."
-    )
-    
-    if provider_key == "gemini":
-        model_name = st.selectbox("Gemini Model", ["gemini-1.5-flash", "gemini-1.5-pro"])
-    else:
-        model_name = st.selectbox("OpenAI Model", ["gpt-4o-mini", "gpt-4o"])
-        
-    if api_key_input:
-        st.success(f"🔑 {provider} Key Configured")
-    else:
-        st.info("💡 Running in Live Demo Mode (Built-in Rule AI active)")
-
     st.markdown("---")
     
     # Navigation Menu
@@ -290,7 +260,6 @@ with st.sidebar:
         selected_menu = st.radio("Choose Module", menu_options)
 
     st.markdown("---")
-    st.caption("⚡ Built 100% in Pure Python using Streamlit, SQLite & LLM APIs.")
 
 # Main Header Global Statistics Bar
 def render_header_stats():
@@ -376,10 +345,18 @@ if selected_menu == "Dashboard Overview":
         """, unsafe_allow_html=True)
 
 elif selected_menu == "Resume Parser & JD Matcher":
-    render_resume_parser_page(api_key=api_key_input, provider=provider_key, model_name=model_name)
+    render_resume_parser_page(
+        api_key=os.getenv("GEMINI_API_KEY", ""),
+        provider="gemini",
+        model_name=os.getenv("GEMINI_MODEL", "gemini-1.5-flash")
+    )
 
 elif selected_menu == "AI Mock Interviewer":
-    render_mock_interview_page(api_key=api_key_input, provider=provider_key, model_name=model_name)
+    render_mock_interview_page(
+        api_key=os.getenv("GEMINI_API_KEY", ""),
+        provider="gemini",
+        model_name=os.getenv("GEMINI_MODEL", "gemini-1.5-flash")
+    )
 
 elif selected_menu == "Project Directory Showcase":
     render_project_directory_page()
