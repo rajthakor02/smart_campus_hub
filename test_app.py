@@ -4,7 +4,7 @@ import os
 # Add project root to sys.path
 sys.path.insert(0, os.path.dirname(__file__))
 
-from database import (
+from campus_db import (
     init_db,
     create_user,
     authenticate_user,

@@ -5,7 +5,7 @@ if _PARENT_DIR not in sys.path:
     sys.path.insert(0, _PARENT_DIR)
 
 import streamlit as st
-from database import authenticate_user, create_user
+from campus_db import authenticate_user, create_user
 
 def init_auth_state():
     """Initializes authentication session state variables."""

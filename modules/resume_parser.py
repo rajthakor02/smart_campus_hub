@@ -43,7 +43,7 @@ _PARENT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if _PARENT_DIR not in sys.path:
     sys.path.insert(0, _PARENT_DIR)
 
-from database import save_resume_scan, get_user_resume_scans
+from campus_db import save_resume_scan, get_user_resume_scans
 
 def extract_text_from_pdf(uploaded_file):
     """Extracts plain text from an uploaded PDF file using pdfplumber or pypdf."""
