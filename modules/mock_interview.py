@@ -26,6 +26,12 @@ except ImportError:
     openai = None
     HAS_OPENAI = False
 
+import os
+import sys
+_PARENT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if _PARENT_DIR not in sys.path:
+    sys.path.insert(0, _PARENT_DIR)
+
 from database import save_interview_log, get_interview_stats
 
 def init_interview_state():

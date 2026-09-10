@@ -1,19 +1,36 @@
-import streamlit as st
 import os
+import sys
+
+# Guarantee repository root is in sys.path on Streamlit Cloud and Render
+REPO_ROOT = os.path.dirname(os.path.abspath(__file__))
+if REPO_ROOT not in sys.path:
+    sys.path.insert(0, REPO_ROOT)
+
+import importlib.util
+import streamlit as st
 from dotenv import load_dotenv
 
 # Load environment variables if available
 load_dotenv()
 
+# Guaranteed database module loader across platforms
+try:
+    import database
+except (ImportError, ModuleNotFoundError):
+    db_path = os.path.join(REPO_ROOT, "database.py")
+    db_spec = importlib.util.spec_from_file_location("database", db_path)
+    database = importlib.util.module_from_spec(db_spec)
+    sys.modules["database"] = database
+    db_spec.loader.exec_module(database)
+
+init_db = database.init_db
+get_projects = database.get_projects
+get_interview_stats = database.get_interview_stats
+get_resume_stats = database.get_resume_stats
+get_user_resume_scans = database.get_user_resume_scans
+get_user_interview_history = database.get_user_interview_history
+
 # Initialize Database
-from database import (
-    init_db,
-    get_projects,
-    get_interview_stats,
-    get_resume_stats,
-    get_user_resume_scans,
-    get_user_interview_history,
-)
 init_db()
 
 # Navigation menu import with fallback

@@ -38,6 +38,11 @@ except ImportError:
     openai = None
     HAS_OPENAI = False
 
+import sys
+_PARENT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if _PARENT_DIR not in sys.path:
+    sys.path.insert(0, _PARENT_DIR)
+
 from database import save_resume_scan, get_user_resume_scans
 
 def extract_text_from_pdf(uploaded_file):

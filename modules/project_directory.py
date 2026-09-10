@@ -1,3 +1,9 @@
+import os
+import sys
+_PARENT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if _PARENT_DIR not in sys.path:
+    sys.path.insert(0, _PARENT_DIR)
+
 import streamlit as st
 from database import get_projects, add_project, toggle_project_upvote, has_user_upvoted, upvote_project
 
