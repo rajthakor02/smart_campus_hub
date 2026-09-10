@@ -204,14 +204,21 @@ def parse_eval_json(text):
             "ideal_snippet": "Mention specific tools, benchmarks, and performance considerations."
         }
 
-def render_mock_interview_page(api_key, provider, model_name):
+def render_mock_interview_page(api_key, provider, model_name, current_user=None):
     """Renders the AI Mock Interviewer module UI."""
     init_interview_state()
 
-    st.markdown("""
+    user_status_html = ""
+    if current_user:
+        user_status_html = f"<div style='margin-top: 8px; font-size: 0.88rem; color: #34D399;'>👤 Session tracked for: <strong>{current_user.get('full_name')} (@{current_user.get('username')})</strong></div>"
+    else:
+        user_status_html = "<div style='margin-top: 8px; font-size: 0.88rem; color: #FBBF24;'>💡 Guest Mode: Sign in to save your interview scores and personal evaluation history.</div>"
+
+    st.markdown(f"""
         <div class="module-header">
             <h2>🎙️ Interactive AI Mock Technical Interviewer</h2>
             <p>Practice real-time technical interviews tailored to your target role and experience level. Receive instant streaming questions and live feedback cards after every response.</p>
+            {user_status_html}
         </div>
     """, unsafe_allow_html=True)
 
@@ -232,8 +239,9 @@ def render_mock_interview_page(api_key, provider, model_name):
         )
 
     with ctrl_col3:
-        stats = get_interview_stats()
-        st.metric("Total Practice Qs", stats["total_interviews"], delta=f"Avg Score: {stats['avg_score']}%" if stats['avg_score'] else "New Session")
+        stats = get_interview_stats(username=current_user.get("username") if current_user else None)
+        stat_label = "My Practice Qs" if current_user else "Total Practice Qs"
+        st.metric(stat_label, stats["total_interviews"], delta=f"Avg Score: {stats['avg_score']}%" if stats['avg_score'] else "New Session")
 
     with ctrl_col4:
         st.write("")
@@ -326,7 +334,9 @@ def render_mock_interview_page(api_key, provider, model_name):
                 user_answer=user_input,
                 score=eval_res.get("score", 75),
                 strengths=eval_res.get("strengths", ""),
-                gaps=eval_res.get("gaps", "")
+                gaps=eval_res.get("gaps", ""),
+                user_id=current_user.get("id") if current_user else None,
+                username=current_user.get("username") if current_user else None
             )
 
         st.session_state.current_question_num += 1

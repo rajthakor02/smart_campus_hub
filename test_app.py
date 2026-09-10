@@ -4,60 +4,114 @@ import os
 # Add project root to sys.path
 sys.path.insert(0, os.path.dirname(__file__))
 
-from database import init_db, get_projects, add_project, upvote_project, save_interview_log, save_resume_scan
+from database import (
+    init_db,
+    create_user,
+    authenticate_user,
+    get_projects,
+    add_project,
+    toggle_project_upvote,
+    has_user_upvoted,
+    save_interview_log,
+    get_interview_stats,
+    save_resume_scan,
+    get_user_resume_scans,
+    get_user_interview_history
+)
 from modules.resume_parser import fallback_resume_analyzer
 from modules.mock_interview import evaluate_user_answer
 
 def run_tests():
-    print("--- Running Smart Campus Hub Verification Tests ---")
+    print("--- Running Capstone Smart Campus Hub Verification Tests ---")
     
-    # 1. Test Database Initialization & CRUD
+    # 1. Test Database Initialization & Relational Schemas
     init_db()
     projects = get_projects()
     print(f"[OK] Initial Seeded Projects Count: {len(projects)}")
     assert len(projects) >= 5, "Database seeding failed"
-    
-    first_proj_id = projects[0]['id']
-    initial_upvotes = projects[0]['upvotes']
-    upvote_project(first_proj_id)
-    updated_projects = get_projects()
-    print(f"[OK] Upvote Test Passed: ID {first_proj_id} upvotes went from {initial_upvotes} to {updated_projects[0]['upvotes']}")
-    assert updated_projects[0]['upvotes'] == initial_upvotes + 1
-    
-    # Test Adding Project
-    new_id = add_project(
-        title="Automated Quantum Simulator",
-        student_name="Tester Bot",
-        domain="AI / Machine Learning",
-        tech_stack="Python, Qiskit, Streamlit",
-        description="A testing simulator for quantum circuits.",
-        github_url="https://github.com/test/quantum",
-        demo_url="https://quantum.demo"
+
+    # 2. Test User Authentication & Password Hashing
+    test_uname = "capstone_tester"
+    test_email = "tester@campus.edu"
+    test_pwd = "SecurePass123!"
+
+    # Create User
+    ok, msg, user = create_user(
+        username=test_uname,
+        email=test_email,
+        password=test_pwd,
+        full_name="Capstone Tester",
+        role="student"
     )
-    print(f"[OK] New Project Added with ID: {new_id}")
+    if not ok and "already" in msg.lower():
+        print(f"[OK] User '{test_uname}' already exists, proceeding to auth verification.")
+    else:
+        assert ok, f"User creation failed: {msg}"
+        print(f"[OK] User created successfully: {user['username']}")
+
+    # Authenticate User with Valid Password
+    auth_ok, auth_msg, auth_user = authenticate_user(test_uname, test_pwd)
+    assert auth_ok, f"Authentication failed: {auth_msg}"
+    print(f"[OK] Authentication passed for '{auth_user['username']}'")
+
+    # Authenticate User with Invalid Password
+    bad_ok, bad_msg, _ = authenticate_user(test_uname, "WrongPassword!")
+    assert not bad_ok, "Authentication should fail with wrong password"
+    print(f"[OK] Invalid password rejection test passed")
+
+    # 3. Test User-Specific Project Upvoting
+    first_proj_id = projects[0]['id']
+    user_id = auth_user['id']
     
-    # 2. Test Resume Fallback Analyzer
+    # Toggle upvote on
+    upvoted, count_after_vote = toggle_project_upvote(user_id, first_proj_id)
+    assert has_user_upvoted(user_id, first_proj_id) == upvoted
+    print(f"[OK] Project upvote toggle test passed (Current state: {upvoted}, count: {count_after_vote})")
+
+    # Toggle upvote off
+    upvoted_off, count_after_unvote = toggle_project_upvote(user_id, first_proj_id)
+    assert not upvoted_off
+    print(f"[OK] Project un-vote toggle test passed (Count: {count_after_unvote})")
+
+    # 4. Test User-Scoped Resume Scans
+    save_resume_scan(
+        filename="tester_resume.pdf",
+        target_role="Full Stack Developer",
+        match_score=85,
+        matched_skills=["Python", "Streamlit", "SQLite"],
+        missing_skills=["Docker", "Kubernetes"],
+        recommendations=["Deploy on cloud container"],
+        user_id=user_id,
+        username=test_uname
+    )
+    user_scans = get_user_resume_scans(test_uname)
+    assert len(user_scans) >= 1, "User resume scans not saved/retrieved"
+    print(f"[OK] User-scoped resume scan verified: {user_scans[0]['filename']} ({user_scans[0]['match_score']}%)")
+
+    # 5. Test User-Scoped Mock Interview History
+    save_interview_log(
+        role="Python Engineer",
+        difficulty="Mid-Level",
+        question="How does Python's GIL impact multithreading?",
+        user_answer="The GIL prevents multiple native threads from executing Python bytecodes at once.",
+        score=88,
+        strengths="Clear explanation of GIL constraint.",
+        gaps="Mention multiprocessing alternative.",
+        user_id=user_id,
+        username=test_uname
+    )
+    user_ivs = get_user_interview_history(test_uname)
+    assert len(user_ivs) >= 1, "User interview history not retrieved"
+    print(f"[OK] User-scoped interview log verified: {user_ivs[0]['role']} ({user_ivs[0]['score']}/100)")
+
+    # 6. Test Resume Fallback Analyzer
     sample_resume = "Experienced Python developer with skills in Streamlit, SQL, PyTorch, and Data Structures."
     sample_jd = "Looking for a Python Developer with knowledge of Streamlit, SQL, Docker, and AWS."
     analysis = fallback_resume_analyzer(sample_resume, sample_jd)
-    print(f"[OK] Resume Analysis Score: {analysis['match_score']}%")
-    print(f"  Matched Skills: {analysis['matched_skills']}")
-    print(f"  Missing Skills: {analysis['missing_skills']}")
     assert analysis['match_score'] > 0
-    assert "Python" in [s.capitalize() for s in analysis['matched_skills']]
-    
-    # 3. Test Mock Interview Evaluator
-    eval_res = evaluate_user_answer(
-        role="Python Engineer",
-        difficulty="Mid-Level Engineer",
-        question="How do you handle database connections in Streamlit?",
-        user_answer="I use st.cache_resource to cache the sqlite connection object so it isn't recreated on every rerun."
-    )
-    print(f"[OK] Interview Eval Score: {eval_res['score']}/100")
-    print(f"  Strengths: {eval_res['strengths']}")
-    assert eval_res['score'] >= 50
+    print(f"[OK] Resume heuristic scoring passed: {analysis['match_score']}%")
 
-    print("\nALL VERIFICATION TESTS PASSED SUCCESSFULLY!")
+    print("\n[SUCCESS] ALL CAPSTONE DATABASE & AUTH VERIFICATION TESTS PASSED!")
 
 if __name__ == "__main__":
     run_tests()

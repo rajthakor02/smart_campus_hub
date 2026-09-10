@@ -1,12 +1,19 @@
 import streamlit as st
-from database import get_projects, add_project, upvote_project
+from database import get_projects, add_project, toggle_project_upvote, has_user_upvoted, upvote_project
 
-def render_project_directory_page():
+def render_project_directory_page(current_user=None):
     """Renders the Student Project Showcase Directory module UI."""
-    st.markdown("""
+    user_status_html = ""
+    if current_user:
+        user_status_html = f"<div style='margin-top: 8px; font-size: 0.88rem; color: #34D399;'>👤 Logged in as: <strong>{current_user.get('full_name')} (@{current_user.get('username')})</strong></div>"
+    else:
+        user_status_html = "<div style='margin-top: 8px; font-size: 0.88rem; color: #FBBF24;'>💡 Browsing in Guest Mode. Sign in to submit projects and track your upvotes!</div>"
+
+    st.markdown(f"""
         <div class="module-header">
             <h2>🚀 Student Project Showcase Directory</h2>
             <p>Discover innovative campus engineering projects, star student repositories, filter by domain/tech stack, or submit your own project to gain visibility with top recruiters.</p>
+            {user_status_html}
         </div>
     """, unsafe_allow_html=True)
 
@@ -16,7 +23,7 @@ def render_project_directory_page():
     with filter_col1:
         domain_filter = st.selectbox(
             "Filter by Domain",
-            ["All", "AI / Machine Learning", "Web Development", "IoT / Data Science", "NLP / AI", "Other Domain"]
+            ["All", "AI / Machine Learning", "Web Development", "IoT / Data Science", "NLP / AI", "Mobile App", "Cybersecurity", "Other Domain"]
         )
 
     with filter_col2:
@@ -35,7 +42,8 @@ def render_project_directory_page():
             p_col1, p_col2 = st.columns(2)
             with p_col1:
                 title = st.text_input("Project Title *", placeholder="e.g. NeuralVision Campus Navigation")
-                student_name = st.text_input("Student Name & Department *", placeholder="e.g. Jane Doe (CS '25)")
+                default_author = f"{current_user.get('full_name')} ({current_user.get('role', 'Student').capitalize()})" if current_user else ""
+                student_name = st.text_input("Student Name & Department *", value=default_author, placeholder="e.g. Jane Doe (CS '25)")
                 domain = st.selectbox("Primary Domain *", ["AI / Machine Learning", "Web Development", "IoT / Data Science", "NLP / AI", "Mobile App", "Cybersecurity", "Other Domain"])
             
             with p_col2:
@@ -58,7 +66,8 @@ def render_project_directory_page():
                         tech_stack=tech_stack,
                         description=description,
                         github_url=github_url,
-                        demo_url=demo_url
+                        demo_url=demo_url,
+                        user_id=current_user.get("id") if current_user else None
                     )
                     st.success("🎉 Project published successfully to the directory!")
                     st.rerun()
@@ -115,11 +124,18 @@ def render_project_directory_page():
                         </div>
                     """, unsafe_allow_html=True)
 
-                    # Upvote Button (handled via Streamlit state)
+                    # Upvote Button with User Verification
                     up_col1, up_col2 = st.columns([3, 1])
                     with up_col2:
-                        if st.button(f"👍 {proj['upvotes']}", key=f"upvote_{proj['id']}", use_container_width=True):
-                            upvote_project(proj['id'])
+                        user_id = current_user.get("id") if current_user else None
+                        has_voted = has_user_upvoted(user_id, proj["id"]) if user_id else False
+                        button_label = f"⭐ {proj['upvotes']}" if has_voted else f"👍 {proj['upvotes']}"
+
+                        if st.button(button_label, key=f"upvote_{proj['id']}", use_container_width=True):
+                            if user_id:
+                                toggle_project_upvote(user_id, proj["id"])
+                            else:
+                                upvote_project(proj["id"])
                             st.rerun()
 
                     st.markdown("<br>", unsafe_allow_html=True)

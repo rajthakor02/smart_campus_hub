@@ -6,7 +6,14 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # Initialize Database
-from database import init_db, get_projects, get_interview_stats, get_resume_stats
+from database import (
+    init_db,
+    get_projects,
+    get_interview_stats,
+    get_resume_stats,
+    get_user_resume_scans,
+    get_user_interview_history,
+)
 init_db()
 
 # Navigation menu import with fallback
@@ -17,6 +24,7 @@ except ImportError:
     HAS_OPTION_MENU = False
 
 # Import Modules
+from modules.auth import render_auth_page, render_sidebar_user_profile, get_current_user, logout_user
 from modules.resume_parser import render_resume_parser_page
 from modules.mock_interview import render_mock_interview_page
 from modules.project_directory import render_project_directory_page
@@ -385,6 +393,9 @@ def inject_custom_css():
 
 inject_custom_css()
 
+# Current User State
+current_user = get_current_user()
+
 # Sidebar Setup
 with st.sidebar:
     st.markdown("""
@@ -394,15 +405,36 @@ with st.sidebar:
         </div>
     """, unsafe_allow_html=True)
 
+    # Render User Profile Card or Guest Badge
+    if current_user:
+        render_sidebar_user_profile()
+    else:
+        st.markdown("""
+            <div style="background: rgba(30, 41, 59, 0.5); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 8px; padding: 10px 12px; margin-bottom: 12px; font-size: 0.82rem; color: #9BA3AC;">
+                👋 <strong>Guest Mode</strong><br>Sign in to save your personal resume scans & interview scores.
+            </div>
+        """, unsafe_allow_html=True)
+
     st.markdown("---")
     
-    menu_options = [
-        "Dashboard",
-        "Resume Parser",
-        "AI Mock Interview",
-        "Project Showcase"
-    ]
-    menu_icons = ["house", "file-earmark-text", "mic", "grid"]
+    if current_user:
+        menu_options = [
+            "Dashboard",
+            "Resume Parser",
+            "AI Mock Interview",
+            "Project Showcase",
+            "My Profile"
+        ]
+        menu_icons = ["house", "file-earmark-text", "mic", "grid", "person-badge"]
+    else:
+        menu_options = [
+            "Dashboard",
+            "Sign In / Register",
+            "Resume Parser",
+            "AI Mock Interview",
+            "Project Showcase"
+        ]
+        menu_icons = ["house", "box-arrow-in-right", "file-earmark-text", "mic", "grid"]
 
     _override = st.session_state.pop("_nav_override", None)
     _default_index = menu_options.index(_override) if _override in menu_options else 0
@@ -433,11 +465,24 @@ with st.sidebar:
 
     st.markdown("---")
 
-# Main Header Global Statistics Bar
-def render_header_stats():
+# Main Header Global / Personal Statistics Bar
+def render_header_stats(user=None):
     proj_count = len(get_projects())
-    int_stats = get_interview_stats()
-    res_stats = get_resume_stats()
+    if user:
+        username = user.get("username")
+        int_stats = get_interview_stats(username=username)
+        res_stats = get_resume_stats(username=username)
+        int_label = "My Interviews"
+        res_label = "My Resume Scans"
+        int_delta = f"Avg Score: {int_stats['avg_score']}%" if int_stats['avg_score'] else "Start First"
+        res_delta = f"Avg Match: {res_stats['avg_score']}%" if res_stats['avg_score'] else "Upload Resume"
+    else:
+        int_stats = get_interview_stats()
+        res_stats = get_resume_stats()
+        int_label = "Mock Interviews"
+        res_label = "Resume ATS Scans"
+        int_delta = f"Avg Score: {int_stats['avg_score']}%" if int_stats['avg_score'] else "Active"
+        res_delta = f"Avg Match: {res_stats['avg_score']}%" if res_stats['avg_score'] else "Active"
 
     col1, col2, col3, col4 = st.columns([3, 2, 2, 2])
     
@@ -451,14 +496,86 @@ def render_header_stats():
         st.metric("Featured Projects", proj_count, delta="Live Directory")
         
     with col3:
-        st.metric("Mock Interviews", int_stats["total_interviews"], delta=f"Avg Score: {int_stats['avg_score']}%" if int_stats['avg_score'] else "Active")
+        st.metric(int_label, int_stats["total_interviews"], delta=int_delta)
         
     with col4:
-        st.metric("Resume ATS Scans", res_stats["total_scans"], delta=f"Avg Match: {res_stats['avg_score']}%" if res_stats['avg_score'] else "Active")
+        st.metric(res_label, res_stats["total_scans"], delta=res_delta)
 
     st.markdown("---")
 
-render_header_stats()
+render_header_stats(current_user)
+
+def render_my_profile_page(user):
+    """Renders the personalized user profile and activity dashboard."""
+    username = user.get("username")
+    res_stats = get_resume_stats(username)
+    int_stats = get_interview_stats(username)
+    scans = get_user_resume_scans(username, limit=10)
+    interviews = get_user_interview_history(username, limit=10)
+
+    st.markdown(f"""
+        <div class="module-header">
+            <h2>👤 Student Profile: {user.get('full_name')}</h2>
+            <p>Email: {user.get('email')} &bull; Role: <strong>{user.get('role', 'student').capitalize()}</strong> &bull; Member since: {user.get('created_at', '')[:10]}</p>
+        </div>
+    """, unsafe_allow_html=True)
+
+    m1, m2, m3, m4 = st.columns(4)
+    with m1:
+        st.metric("Resume Scans", res_stats["total_scans"])
+    with m2:
+        st.metric("Avg ATS Score", f"{res_stats['avg_score']}%" if res_stats['avg_score'] else "N/A")
+    with m3:
+        st.metric("Mock Interviews", int_stats["total_interviews"])
+    with m4:
+        st.metric("Avg Interview Score", f"{int_stats['avg_score']}%" if int_stats['avg_score'] else "N/A")
+
+    st.markdown("---")
+
+    p_tab1, p_tab2 = st.tabs(["📄 My Saved Resume Scans", "🎙️ My Mock Interview Evaluations"])
+
+    with p_tab1:
+        if not scans:
+            st.info("ℹ️ You haven't scanned any resumes yet. Navigate to 'Resume Parser' to run an ATS compatibility scan!")
+        else:
+            for s in scans:
+                with st.container():
+                    st.markdown(f"""
+                        <div class="card-box" style="margin-bottom: 12px;">
+                            <div style="display:flex; justify-content:space-between; align-items:center;">
+                                <h4 style="margin:0; color:#F8FAFC;">{s['filename']}</h4>
+                                <span style="background-color:rgba(16, 185, 129, 0.2); color:#34D399; border:1px solid rgba(52,211,153,0.4); padding:4px 12px; border-radius:14px; font-weight:bold;">
+                                    ATS Score: {s['match_score']}%
+                                </span>
+                            </div>
+                            <p style="margin:6px 0; color:#9BA3AC; font-size:0.85rem;">Target Role: <strong>{s['target_role']}</strong> &bull; Scanned on: {s['timestamp'][:16]}</p>
+                            <div style="margin-top:8px;">
+                                <small style="color:#60A5FA;">Matched Skills: {', '.join(s['matched_skills'][:5]) if s['matched_skills'] else 'None detected'}</small>
+                            </div>
+                        </div>
+                    """, unsafe_allow_html=True)
+
+    with p_tab2:
+        if not interviews:
+            st.info("ℹ️ No mock interview sessions recorded yet. Navigate to 'AI Mock Interview' to practice technical Q&A!")
+        else:
+            for iv in interviews:
+                with st.container():
+                    st.markdown(f"""
+                        <div class="card-box" style="margin-bottom: 12px;">
+                            <div style="display:flex; justify-content:space-between; align-items:center;">
+                                <h4 style="margin:0; color:#F8FAFC;">{iv['role']} ({iv['difficulty']})</h4>
+                                <span style="background-color:rgba(59, 130, 246, 0.2); color:#60A5FA; border:1px solid rgba(59,130,246,0.4); padding:4px 12px; border-radius:14px; font-weight:bold;">
+                                    Score: {iv['score']}/100
+                                </span>
+                            </div>
+                            <p style="margin:6px 0; color:#CBD5E1; font-size:0.9rem;"><strong>Q:</strong> {iv['question'][:140]}...</p>
+                            <p style="margin:4px 0; color:#9BA3AC; font-size:0.85rem;"><strong>Your Answer:</strong> {iv['user_answer'][:120]}...</p>
+                            <div style="margin-top:6px; font-size:0.82rem; color:#34D399;">
+                                <strong>Feedback:</strong> {iv['strengths']}
+                            </div>
+                        </div>
+                    """, unsafe_allow_html=True)
 
 # Page Routing Logic
 if selected_menu == "Dashboard":
@@ -524,19 +641,30 @@ if selected_menu == "Dashboard":
             st.session_state["_nav_override"] = "Project Showcase"
             st.rerun()
 
+elif selected_menu == "Sign In / Register":
+    render_auth_page()
+
+elif selected_menu == "My Profile":
+    if current_user:
+        render_my_profile_page(current_user)
+    else:
+        render_auth_page()
+
 elif selected_menu == "Resume Parser":
     render_resume_parser_page(
         api_key=os.getenv("GEMINI_API_KEY", ""),
         provider="gemini",
-        model_name=os.getenv("GEMINI_MODEL", "gemini-1.5-flash")
+        model_name=os.getenv("GEMINI_MODEL", "gemini-1.5-flash"),
+        current_user=current_user
     )
 
 elif selected_menu == "AI Mock Interview":
     render_mock_interview_page(
         api_key=os.getenv("GEMINI_API_KEY", ""),
         provider="gemini",
-        model_name=os.getenv("GEMINI_MODEL", "gemini-1.5-flash")
+        model_name=os.getenv("GEMINI_MODEL", "gemini-1.5-flash"),
+        current_user=current_user
     )
 
 elif selected_menu == "Project Showcase":
-    render_project_directory_page()
+    render_project_directory_page(current_user=current_user)

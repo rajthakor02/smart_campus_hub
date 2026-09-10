@@ -38,7 +38,7 @@ except ImportError:
     openai = None
     HAS_OPENAI = False
 
-from database import save_resume_scan
+from database import save_resume_scan, get_user_resume_scans
 
 def extract_text_from_pdf(uploaded_file):
     """Extracts plain text from an uploaded PDF file using pdfplumber or pypdf."""
@@ -211,12 +211,19 @@ def fallback_resume_analyzer(resume_text, job_description):
         "executive_summary": f"Demonstrates strong alignment ({score}% match) with core role requirements. Addressing gap areas will significantly increase interview callbacks."
     }
 
-def render_resume_parser_page(api_key, provider, model_name):
+def render_resume_parser_page(api_key, provider, model_name, current_user=None):
     """Renders the Resume Parser & Job Matcher module UI."""
-    st.markdown("""
+    user_status_html = ""
+    if current_user:
+        user_status_html = f"<div style='margin-top: 8px; font-size: 0.88rem; color: #34D399;'>👤 Scans are privately saved to: <strong>{current_user.get('full_name')} (@{current_user.get('username')})</strong></div>"
+    else:
+        user_status_html = "<div style='margin-top: 8px; font-size: 0.88rem; color: #FBBF24;'>💡 Guest Mode: Sign in to save and track your personal resume ATS progress over time.</div>"
+
+    st.markdown(f"""
         <div class="module-header">
             <h2>📄 AI Resume Parser & Job Matcher</h2>
             <p>Upload your PDF resume, paste the target job description, and get instant ATS compatibility scoring, skill gap analysis, and tailored recommendations.</p>
+            {user_status_html}
         </div>
     """, unsafe_allow_html=True)
 
@@ -270,7 +277,7 @@ def render_resume_parser_page(api_key, provider, model_name):
                 model_name=model_name
             )
 
-        # Save scan to SQLite DB
+        # Save scan to SQLite DB linked to user
         filename = uploaded_file.name if uploaded_file else "Pasted_Resume_Text.txt"
         save_resume_scan(
             filename=filename,
@@ -278,7 +285,9 @@ def render_resume_parser_page(api_key, provider, model_name):
             match_score=results.get("match_score", 70),
             matched_skills=results.get("matched_skills", []),
             missing_skills=results.get("missing_skills", []),
-            recommendations=results.get("recommendations", [])
+            recommendations=results.get("recommendations", []),
+            user_id=current_user.get("id") if current_user else None,
+            username=current_user.get("username") if current_user else None
         )
 
         st.markdown("---")
@@ -336,3 +345,19 @@ def render_resume_parser_page(api_key, provider, model_name):
                     <strong>Step {idx}:</strong> {rec}
                 </div>
             """, unsafe_allow_html=True)
+
+    # Personal User Scans History Drawer
+    if current_user:
+        user_scans = get_user_resume_scans(current_user.get("username"), limit=5)
+        if user_scans:
+            st.markdown("<br>", unsafe_allow_html=True)
+            with st.expander(f"📁 {current_user.get('full_name')}'s Recent Resume Scans ({len(user_scans)})", expanded=False):
+                for scan in user_scans:
+                    s_col1, s_col2, s_col3 = st.columns([2, 1, 3])
+                    with s_col1:
+                        st.markdown(f"**{scan['filename']}**\n\n<small style='color:#94A3B8;'>{scan['timestamp'][:16]}</small>", unsafe_allow_html=True)
+                    with s_col2:
+                        st.markdown(f"<span style='background:#1E293B; border: 1px solid #10B981; color:#34D399; padding:4px 10px; border-radius:12px; font-weight:bold;'>{scan['match_score']}%</span>", unsafe_allow_html=True)
+                    with s_col3:
+                        st.caption(f"Role: {scan['target_role']} | Skills: {', '.join(scan['matched_skills'][:4]) if scan['matched_skills'] else 'N/A'}")
+                    st.divider()
