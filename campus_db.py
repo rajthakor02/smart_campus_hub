@@ -175,10 +175,12 @@ def init_db():
         # Initialize MongoDB Collections & Indexes
         users_col = mongo_db["users"]
         projects_col = mongo_db["projects"]
+        agent_col = mongo_db["agent_sessions"]
         
         # Create unique indexes
         users_col.create_index("username", unique=True)
         users_col.create_index("email", unique=True)
+        agent_col.create_index([("username", 1), ("created_at", 1)])
         
         # Seed demo users in MongoDB if empty
         if users_col.count_documents({}) == 0:
@@ -287,6 +289,20 @@ def init_db():
             UNIQUE(user_id, project_id),
             FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE,
             FOREIGN KEY(project_id) REFERENCES projects(id) ON DELETE CASCADE
+        )
+    ''')
+
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS agent_sessions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER,
+            username TEXT NOT NULL,
+            session_id TEXT DEFAULT 'default',
+            role TEXT NOT NULL,
+            content TEXT NOT NULL,
+            tool_calls TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
         )
     ''')
     
@@ -827,6 +843,94 @@ def get_user_resume_scans(username, limit=10):
         rows.append(d)
     conn.close()
     return rows
+
+# --- AI Agent Conversation Session Persistence ---
+
+def save_agent_message(username: str, role: str, content: str, tool_calls=None, session_id: str = "default", user_id: int = None):
+    """Saves a message in the agent conversation session (MongoDB Atlas or SQLite)."""
+    mongo_db = get_mongo_db()
+    now_iso = datetime.utcnow().isoformat()
+    if mongo_db is not None:
+        doc = {
+            "username": username,
+            "user_id": user_id,
+            "session_id": session_id,
+            "role": role,
+            "content": content,
+            "tool_calls": tool_calls or [],
+            "created_at": now_iso
+        }
+        res = mongo_db["agent_sessions"].insert_one(doc)
+        return str(res.inserted_id)
+
+    conn = get_sqlite_connection()
+    cursor = conn.cursor()
+    tool_calls_json = json.dumps(tool_calls) if tool_calls else None
+    cursor.execute('''
+        INSERT INTO agent_sessions (user_id, username, session_id, role, content, tool_calls, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+    ''', (user_id, username, session_id, role, content, tool_calls_json, now_iso))
+    conn.commit()
+    msg_id = cursor.lastrowid
+    conn.close()
+    return msg_id
+
+def get_agent_history(username: str, session_id: str = "default", limit: int = 50):
+    """Fetches past conversation turns for the AI agent."""
+    mongo_db = get_mongo_db()
+    if mongo_db is not None:
+        cursor = mongo_db["agent_sessions"].find({
+            "username": username,
+            "session_id": session_id
+        }).sort("created_at", 1).limit(limit)
+        items = []
+        for doc in cursor:
+            doc["id"] = str(doc.get("_id", ""))
+            items.append(doc)
+        return items
+
+    conn = get_sqlite_connection()
+    cursor = conn.cursor()
+    cursor.execute('''
+        SELECT id, user_id, username, session_id, role, content, tool_calls, created_at
+        FROM agent_sessions
+        WHERE username = ? AND session_id = ?
+        ORDER BY created_at ASC
+        LIMIT ?
+    ''', (username, session_id, limit))
+    rows = []
+    for r in cursor.fetchall():
+        d = dict(r)
+        if d.get("tool_calls"):
+            try:
+                d["tool_calls"] = json.loads(d["tool_calls"])
+            except Exception:
+                d["tool_calls"] = []
+        else:
+            d["tool_calls"] = []
+        rows.append(d)
+    conn.close()
+    return rows
+
+def clear_agent_history(username: str, session_id: str = "default"):
+    """Clears the AI agent conversation for a user."""
+    mongo_db = get_mongo_db()
+    if mongo_db is not None:
+        mongo_db["agent_sessions"].delete_many({
+            "username": username,
+            "session_id": session_id
+        })
+        return True
+
+    conn = get_sqlite_connection()
+    cursor = conn.cursor()
+    cursor.execute('''
+        DELETE FROM agent_sessions
+        WHERE username = ? AND session_id = ?
+    ''', (username, session_id))
+    conn.commit()
+    conn.close()
+    return True
 
 if __name__ == "__main__":
     init_db()

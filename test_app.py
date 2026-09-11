@@ -16,10 +16,21 @@ from campus_db import (
     get_interview_stats,
     save_resume_scan,
     get_user_resume_scans,
-    get_user_interview_history
+    get_user_interview_history,
+    save_agent_message,
+    get_agent_history,
+    clear_agent_history
 )
 from modules.resume_parser import fallback_resume_analyzer
 from modules.mock_interview import evaluate_user_answer
+from modules.ai_agent import (
+    tool_inspect_user_skills,
+    tool_inspect_interview_gaps,
+    tool_search_campus_projects,
+    tool_generate_milestone_roadmap,
+    tool_generate_project_blueprint,
+    run_ai_agent
+)
 
 def run_tests():
     print("--- Running Capstone Smart Campus Hub Verification Tests ---")
@@ -111,7 +122,55 @@ def run_tests():
     assert analysis['match_score'] > 0
     print(f"[OK] Resume heuristic scoring passed: {analysis['match_score']}%")
 
-    print("\n[SUCCESS] ALL CAPSTONE DATABASE & AUTH VERIFICATION TESTS PASSED!")
+    # 7. Test AI Agent Tool Registry
+    skills_data = tool_inspect_user_skills(test_uname)
+    assert skills_data['status'] == 'success'
+    assert 'Python' in skills_data['verified_skills']
+    print(f"[OK] Agent Tool 1 (inspect_user_skills) passed: {len(skills_data['verified_skills'])} verified skills")
+
+    iv_data = tool_inspect_interview_gaps(test_uname)
+    assert iv_data['status'] == 'success'
+    print(f"[OK] Agent Tool 2 (inspect_interview_gaps) passed: Avg Score {iv_data['average_score']}/100")
+
+    proj_search = tool_search_campus_projects(query="Python")
+    assert proj_search['status'] == 'success'
+    print(f"[OK] Agent Tool 3 (search_campus_projects) passed: {proj_search['total_matches']} projects matched")
+
+    roadmap = tool_generate_milestone_roadmap("Backend Engineer", weeks=4)
+    assert roadmap['status'] == 'success' and len(roadmap['curriculum']) == 4
+    print(f"[OK] Agent Tool 4 (generate_milestone_roadmap) passed: 4-week curriculum generated")
+
+    blueprint = tool_generate_project_blueprint("Smart Campus Hub")
+    assert blueprint['status'] == 'success' and 'suggested_tech_stack' in blueprint
+    print(f"[OK] Agent Tool 5 (generate_project_blueprint) passed: {blueprint['project_title']}")
+
+    # 8. Test Agent Conversation Persistence (MongoDB Atlas / SQLite)
+    msg_id = save_agent_message(
+        username=test_uname,
+        role="assistant",
+        content="Here is your tailored 4-week roadmap.",
+        tool_calls=[{"tool": "tool_generate_milestone_roadmap", "args": {"role": "Backend Engineer"}}],
+        session_id="test_session"
+    )
+    assert msg_id is not None
+    history = get_agent_history(test_uname, session_id="test_session")
+    assert len(history) >= 1
+    assert history[0]['content'] == "Here is your tailored 4-week roadmap."
+    print(f"[OK] Agent Conversation Persistence verified in database (ID: {msg_id})")
+    clear_agent_history(test_uname, session_id="test_session")
+    assert len(get_agent_history(test_uname, session_id="test_session")) == 0
+    print("[OK] Agent Conversation Cleanup passed")
+
+    # 9. Test ReAct Agent Execution Loop
+    agent_resp, agent_trace = run_ai_agent(
+        user_prompt="Audit my profile and find missing skills for a Backend role",
+        current_user=auth_user
+    )
+    assert len(agent_resp) > 50
+    assert len(agent_trace) >= 1
+    print(f"[OK] Autonomous ReAct Agent Loop passed ({len(agent_trace)} tool actions executed)")
+
+    print("\n[SUCCESS] ALL CAPSTONE DATABASE, AUTH & AI AGENT VERIFICATION TESTS PASSED!")
 
 if __name__ == "__main__":
     run_tests()

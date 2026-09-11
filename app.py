@@ -38,6 +38,7 @@ from modules.auth import render_auth_page, render_sidebar_user_profile, get_curr
 from modules.resume_parser import render_resume_parser_page
 from modules.mock_interview import render_mock_interview_page
 from modules.project_directory import render_project_directory_page
+from modules.ai_agent import render_ai_agent_page
 
 # Page Configuration
 st.set_page_config(
@@ -430,21 +431,23 @@ with st.sidebar:
     if current_user:
         menu_options = [
             "Dashboard",
+            "AI Career Agent",
             "Resume Parser",
             "AI Mock Interview",
             "Project Showcase",
             "My Profile"
         ]
-        menu_icons = ["house", "file-earmark-text", "mic", "grid", "person-badge"]
+        menu_icons = ["house", "robot", "file-earmark-text", "mic", "grid", "person-badge"]
     else:
         menu_options = [
             "Dashboard",
             "Sign In / Register",
+            "AI Career Agent",
             "Resume Parser",
             "AI Mock Interview",
             "Project Showcase"
         ]
-        menu_icons = ["house", "box-arrow-in-right", "file-earmark-text", "mic", "grid"]
+        menu_icons = ["house", "box-arrow-in-right", "robot", "file-earmark-text", "mic", "grid"]
 
     _override = st.session_state.pop("_nav_override", None)
     _default_index = menu_options.index(_override) if _override in menu_options else 0
@@ -617,7 +620,23 @@ if selected_menu == "Dashboard":
         </div>
     """, unsafe_allow_html=True)
 
-    d_col1, d_col2, d_col3 = st.columns(3, gap="large")
+    d_col0, d_col1, d_col2, d_col3 = st.columns(4, gap="medium")
+
+    with d_col0:
+        st.markdown("""
+            <div class="card-box" style="height: 100%;">
+                <h3>🤖 AI Career Agent</h3>
+                <p>Autonomous multi-tool advisor for personal skill gap audits, capstone architectural blueprints, and customized 4-week roadmaps.</p>
+                <ul>
+                    <li>ReAct autonomous reasoning loop</li>
+                    <li>Live database tool execution</li>
+                    <li>Persistent session memory</li>
+                </ul>
+            </div>
+        """, unsafe_allow_html=True)
+        if st.button("Launch Agent", key="dash_go_agent"):
+            st.session_state["_nav_override"] = "AI Career Agent"
+            st.rerun()
 
     with d_col1:
         st.markdown("""
@@ -659,7 +678,7 @@ if selected_menu == "Dashboard":
                 <ul>
                     <li>2-Column grid showcase cards</li>
                     <li>Domain & Tech Stack filtering</li>
-                    <li>SQLite persistent database</li>
+                    <li>MongoDB Atlas / SQLite persistence</li>
                 </ul>
             </div>
         """, unsafe_allow_html=True)
@@ -675,6 +694,14 @@ elif selected_menu == "My Profile":
         render_my_profile_page(current_user)
     else:
         render_auth_page()
+
+elif selected_menu == "AI Career Agent":
+    render_ai_agent_page(
+        current_user=current_user,
+        api_key=os.getenv("GEMINI_API_KEY", ""),
+        provider="gemini",
+        model_name=os.getenv("GEMINI_MODEL", "gemini-1.5-flash")
+    )
 
 elif selected_menu == "Resume Parser":
     render_resume_parser_page(
