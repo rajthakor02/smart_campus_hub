@@ -1,19 +1,27 @@
-import sqlite3
 import os
 import json
 import hashlib
 import hmac
 import secrets
+import sqlite3
 from datetime import datetime
 
-DB_PATH = os.path.join(os.path.dirname(__file__), "campus_hub.db")
+# Optional MongoDB driver imports
+try:
+    from pymongo import MongoClient
+    import certifi
+    HAS_PYMONGO = True
+except ImportError:
+    HAS_PYMONGO = False
 
-def get_connection():
-    """Returns a SQLite database connection with row factory and foreign keys enabled."""
-    conn = sqlite3.connect(DB_PATH, check_same_thread=False)
-    conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA foreign_keys = ON;")
-    return conn
+# --- Configuration & Paths ---
+DB_PATH = os.path.join(os.path.dirname(__file__), "campus_hub.db")
+MONGODB_URI = os.getenv("MONGODB_URI", "").strip()
+
+# Global MongoDB references
+_mongo_client = None
+_mongo_db = None
+_IS_USING_MONGO = False
 
 # --- Password Security (PBKDF2-HMAC-SHA256) ---
 
@@ -33,14 +41,156 @@ def verify_password(password: str, stored_hash: str) -> bool:
     except Exception:
         return False
 
-# --- Database Initialization & Migrations ---
+# --- Database Connection Initializer ---
+
+def get_mongo_db():
+    """Attempts to connect to MongoDB Atlas if MONGODB_URI is provided."""
+    global _mongo_client, _mongo_db, _IS_USING_MONGO
+    if not HAS_PYMONGO or not MONGODB_URI:
+        return None
+
+    if _mongo_db is not None:
+        return _mongo_db
+
+    try:
+        ca_file = certifi.where() if 'certifi' in globals() else None
+        _mongo_client = MongoClient(
+            MONGODB_URI,
+            tlsCAFile=ca_file,
+            serverSelectionTimeoutMS=5000
+        )
+        # Verify connection
+        _mongo_client.admin.command('ping')
+        _mongo_db = _mongo_client["campus_hub"]
+        _IS_USING_MONGO = True
+        return _mongo_db
+    except Exception as e:
+        print(f"[MongoDB Warning] Connection to MongoDB Atlas failed: {e}. Falling back to SQLite.")
+        _IS_USING_MONGO = False
+        return None
+
+def is_using_mongodb():
+    """Returns True if the backend is currently connected to MongoDB Atlas."""
+    return _IS_USING_MONGO
+
+def get_sqlite_connection():
+    """Returns a SQLite database connection with row factory and foreign keys enabled."""
+    conn = sqlite3.connect(DB_PATH, check_same_thread=False)
+    conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA foreign_keys = ON;")
+    return conn
+
+# --- Default Seed Data ---
+
+SEED_PROJECTS = [
+    {
+        "title": "Nexus AI: Intelligent Campus Event Matcher",
+        "student_name": "Alex Rivera (CS '25)",
+        "domain": "AI / Machine Learning",
+        "tech_stack": "Python, PyTorch, Streamlit, Scikit-Learn, SQLite",
+        "description": "A personalized event recommendation system utilizing collaborative filtering and LLM semantic embedding to connect students with campus hackathons, research talks, and career workshops.",
+        "github_url": "https://github.com/alex-rivera/nexus-ai-campus",
+        "demo_url": "https://nexus-campus-demo.streamlit.app",
+        "upvotes": 42,
+        "upvoted_by": []
+    },
+    {
+        "title": "EcoCampus: IoT Energy & Carbon Tracker",
+        "student_name": "Sarah Chen (ECE '24)",
+        "domain": "IoT / Data Science",
+        "tech_stack": "Python, Flask, MQTT, Pandas, Plotly, Raspberry Pi",
+        "description": "Real-time campus dorm energy consumption dashboard powered by edge sensors. Monitors HVAC and lighting efficiency, gamifying energy conservation for campus residence halls.",
+        "github_url": "https://github.com/sarahchen/eco-campus-iot",
+        "demo_url": "https://ecocampus-live.org",
+        "upvotes": 35,
+        "upvoted_by": []
+    },
+    {
+        "title": "AlgoMate: Peer-to-Peer Interview Simulator",
+        "student_name": "David Kumar (SE '25)",
+        "domain": "Web Development",
+        "tech_stack": "Python, FastAPI, Streamlit, WebSockets, Docker",
+        "description": "An open platform pairing students for mock coding interviews, featuring collaborative code editors, automated test case execution, and instant feedback reports.",
+        "github_url": "https://github.com/dkumar/algomate-app",
+        "demo_url": "https://algomate.dev",
+        "upvotes": 29,
+        "upvoted_by": []
+    },
+    {
+        "title": "ResumePulse: Automated ATS Optimizer",
+        "student_name": "Maya Patel (DS '26)",
+        "domain": "NLP / AI",
+        "tech_stack": "Python, pdfplumber, Gemini API, spaCy, Streamlit",
+        "description": "Deep learning keyword extractor and ATS resume scorer designed specifically for campus recruitment, helping students format resumes for top tech firms.",
+        "github_url": "https://github.com/mayapatel/resumepulse-ai",
+        "demo_url": "https://resumepulse.streamlit.app",
+        "upvotes": 58,
+        "upvoted_by": []
+    },
+    {
+        "title": "QuantumQuery: Academic Paper Summarizer",
+        "student_name": "Liam Vance (Physics & CS '24)",
+        "domain": "AI / NLP",
+        "tech_stack": "Python, LangChain, OpenAI API, ChromaDB, Streamlit",
+        "description": "RAG-based research assistant enabling students and professors to chat directly with multi-page ArXiv PDF papers, extracting equations, findings, and citations.",
+        "github_url": "https://github.com/liamvance/quantum-query-rag",
+        "demo_url": "https://quantumquery.demo.app",
+        "upvotes": 50,
+        "upvoted_by": []
+    }
+]
+
+# --- Database Initialization & Seeding ---
 
 def init_db():
-    """Initializes SQLite database tables and applies automatic column migrations."""
-    conn = get_connection()
+    """Initializes backend database (MongoDB Atlas if configured, or SQLite)."""
+    mongo_db = get_mongo_db()
+    
+    if mongo_db is not None:
+        # Initialize MongoDB Collections & Indexes
+        users_col = mongo_db["users"]
+        projects_col = mongo_db["projects"]
+        
+        # Create unique indexes
+        users_col.create_index("username", unique=True)
+        users_col.create_index("email", unique=True)
+        
+        # Seed demo users in MongoDB if empty
+        if users_col.count_documents({}) == 0:
+            demo_pwd = hash_password("Campus@2026")
+            users_col.insert_many([
+                {
+                    "username": "student_demo",
+                    "email": "student@campus.edu",
+                    "password_hash": demo_pwd,
+                    "full_name": "Alex Rivera (Demo Student)",
+                    "role": "student",
+                    "created_at": datetime.utcnow().isoformat()
+                },
+                {
+                    "username": "recruiter_demo",
+                    "email": "recruiter@techcorp.com",
+                    "password_hash": demo_pwd,
+                    "full_name": "Sarah Chen (Tech Recruiter)",
+                    "role": "recruiter",
+                    "created_at": datetime.utcnow().isoformat()
+                }
+            ])
+            
+        # Seed demo projects in MongoDB if empty
+        if projects_col.count_documents({}) == 0:
+            for p in SEED_PROJECTS:
+                item = p.copy()
+                item["date_added"] = datetime.utcnow().isoformat()
+                projects_col.insert_one(item)
+                
+        print("[DB Engine] Successfully initialized with MongoDB Atlas Cloud backend!")
+        return
+
+    # Fallback to SQLite
+    conn = get_sqlite_connection()
     cursor = conn.cursor()
     
-    # 1. Users Table (Capstone Authentication)
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS users (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -53,7 +203,6 @@ def init_db():
         )
     ''')
 
-    # 2. Projects Table
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS projects (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -71,7 +220,6 @@ def init_db():
         )
     ''')
     
-    # 3. Interview History Table
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS interview_history (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -89,7 +237,6 @@ def init_db():
         )
     ''')
     
-    # 4. Resume Scans Table
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS resume_scans (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -106,7 +253,6 @@ def init_db():
         )
     ''')
 
-    # 5. Project Upvotes Table (Prevents multiple upvotes per user)
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS project_upvotes (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -121,7 +267,7 @@ def init_db():
     
     conn.commit()
 
-    # --- Schema Migrations for Existing Tables ---
+    # Apply SQLite column migrations
     def add_col_if_missing(table, column, col_type):
         cursor.execute(f"PRAGMA table_info({table})")
         cols = [row["name"] for row in cursor.fetchall()]
@@ -135,10 +281,9 @@ def init_db():
     add_col_if_missing("interview_history", "username", "TEXT")
     conn.commit()
 
-    # --- Seed Demo Users if empty ---
+    # Seed SQLite demo users if empty
     cursor.execute("SELECT COUNT(*) as count FROM users")
-    user_count = cursor.fetchone()["count"]
-    if user_count == 0:
+    if cursor.fetchone()["count"] == 0:
         demo_pwd_hash = hash_password("Campus@2026")
         cursor.execute('''
             INSERT INTO users (username, email, password_hash, full_name, role)
@@ -150,74 +295,31 @@ def init_db():
         ''', ("recruiter_demo", "recruiter@techcorp.com", demo_pwd_hash, "Sarah Chen (Tech Recruiter)", "recruiter"))
         conn.commit()
 
-    # --- Seed Initial Projects if empty ---
+    # Seed SQLite demo projects if empty
     cursor.execute("SELECT COUNT(*) as count FROM projects")
-    row = cursor.fetchone()
-    if row and row['count'] == 0:
-        seed_projects = [
+    if cursor.fetchone()["count"] == 0:
+        seed_tuples = [
             (
                 1,
-                "Nexus AI: Intelligent Campus Event Matcher",
-                "Alex Rivera (CS '25)",
-                "AI / Machine Learning",
-                "Python, PyTorch, Streamlit, Scikit-Learn, SQLite",
-                "A personalized event recommendation system utilizing collaborative filtering and LLM semantic embedding to connect students with campus hackathons, research talks, and career workshops.",
-                "https://github.com/alex-rivera/nexus-ai-campus",
-                "https://nexus-campus-demo.streamlit.app",
-                42
-            ),
-            (
-                2,
-                "EcoCampus: IoT Energy & Carbon Tracker",
-                "Sarah Chen (ECE '24)",
-                "IoT / Data Science",
-                "Python, Flask, MQTT, Pandas, Plotly, Raspberry Pi",
-                "Real-time campus dorm energy consumption dashboard powered by edge sensors. Monitors HVAC and lighting efficiency, gamifying energy conservation for campus residence halls.",
-                "https://github.com/sarahchen/eco-campus-iot",
-                "https://ecocampus-live.org",
-                35
-            ),
-            (
-                1,
-                "AlgoMate: Peer-to-Peer Interview Simulator",
-                "David Kumar (SE '25)",
-                "Web Development",
-                "Python, FastAPI, Streamlit, WebSockets, Docker",
-                "An open platform pairing students for mock coding interviews, featuring collaborative code editors, automated test case execution, and instant feedback reports.",
-                "https://github.com/dkumar/algomate-app",
-                "https://algomate.dev",
-                29
-            ),
-            (
-                1,
-                "ResumePulse: Automated ATS Optimizer",
-                "Maya Patel (DS '26)",
-                "NLP / AI",
-                "Python, pdfplumber, Gemini API, spaCy, Streamlit",
-                "Deep learning keyword extractor and ATS resume scorer designed specifically for campus recruitment, helping students format resumes for top tech firms.",
-                "https://github.com/mayapatel/resumepulse-ai",
-                "https://resumepulse.streamlit.app",
-                58
-            ),
-            (
-                1,
-                "QuantumQuery: Academic Paper Summarizer",
-                "Liam Vance (Physics & CS '24)",
-                "AI / NLP",
-                "Python, LangChain, OpenAI API, ChromaDB, Streamlit",
-                "RAG-based research assistant enabling students and professors to chat directly with multi-page ArXiv PDF papers, extracting equations, findings, and citations.",
-                "https://github.com/liamvance/quantum-query-rag",
-                "https://quantumquery.demo.app",
-                50
+                p["title"],
+                p["student_name"],
+                p["domain"],
+                p["tech_stack"],
+                p["description"],
+                p["github_url"],
+                p["demo_url"],
+                p["upvotes"]
             )
+            for p in SEED_PROJECTS
         ]
         cursor.executemany('''
             INSERT INTO projects (user_id, title, student_name, domain, tech_stack, description, github_url, demo_url, upvotes)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ''', seed_projects)
+        ''', seed_tuples)
         conn.commit()
     
     conn.close()
+    print("[DB Engine] Running on SQLite (Local Fallback). Set MONGODB_URI to connect to MongoDB Atlas Cloud.")
 
 # --- User Authentication Operations ---
 
@@ -236,11 +338,33 @@ def create_user(username, email, password, full_name, role="student"):
     if not clean_name:
         return False, "Full Name is required.", None
 
-    conn = get_connection()
-    cursor = conn.cursor()
+    pwd_hash = hash_password(password)
+    mongo_db = get_mongo_db()
 
+    # MongoDB Implementation
+    if mongo_db is not None:
+        users_col = mongo_db["users"]
+        if users_col.find_one({"username": clean_username}):
+            return False, f"Username '{clean_username}' is already taken.", None
+        if users_col.find_one({"email": clean_email}):
+            return False, f"Email '{clean_email}' is already registered.", None
+            
+        doc = {
+            "username": clean_username,
+            "email": clean_email,
+            "password_hash": pwd_hash,
+            "full_name": clean_name,
+            "role": role,
+            "created_at": datetime.utcnow().isoformat()
+        }
+        res = users_col.insert_one(doc)
+        doc["id"] = str(res.inserted_id)
+        return True, "Account registered successfully!", doc
+
+    # SQLite Fallback Implementation
+    conn = get_sqlite_connection()
+    cursor = conn.cursor()
     try:
-        pwd_hash = hash_password(password)
         cursor.execute('''
             INSERT INTO users (username, email, password_hash, full_name, role)
             VALUES (?, ?, ?, ?, ?)
@@ -268,7 +392,29 @@ def authenticate_user(username_or_email, password):
     if not clean_ident or not password:
         return False, "Please enter both username/email and password.", None
 
-    conn = get_connection()
+    mongo_db = get_mongo_db()
+    if mongo_db is not None:
+        users_col = mongo_db["users"]
+        user_doc = users_col.find_one({
+            "$or": [{"username": clean_ident}, {"email": clean_ident}]
+        })
+        if not user_doc:
+            return False, "No account found with that username or email.", None
+        if verify_password(password, user_doc["password_hash"]):
+            user_dict = {
+                "id": str(user_doc["_id"]),
+                "username": user_doc["username"],
+                "email": user_doc["email"],
+                "full_name": user_doc["full_name"],
+                "role": user_doc.get("role", "student"),
+                "created_at": user_doc.get("created_at", "")
+            }
+            return True, "Login successful!", user_dict
+        else:
+            return False, "Incorrect password. Please try again.", None
+
+    # SQLite Implementation
+    conn = get_sqlite_connection()
     cursor = conn.cursor()
     cursor.execute('''
         SELECT * FROM users WHERE username = ? OR email = ?
@@ -294,7 +440,15 @@ def authenticate_user(username_or_email, password):
 
 def get_user_by_username(username):
     """Fetches user profile dict by username."""
-    conn = get_connection()
+    mongo_db = get_mongo_db()
+    if mongo_db is not None:
+        u = mongo_db["users"].find_one({"username": username})
+        if u:
+            u["id"] = str(u["_id"])
+            return u
+        return None
+
+    conn = get_sqlite_connection()
     cursor = conn.cursor()
     cursor.execute("SELECT id, username, email, full_name, role, created_at FROM users WHERE username = ?", (username,))
     row = cursor.fetchone()
@@ -305,7 +459,25 @@ def get_user_by_username(username):
 
 def add_project(title, student_name, domain, tech_stack, description, github_url="", demo_url="", user_id=None):
     """Adds a new project to the database, optionally linked to a user_id."""
-    conn = get_connection()
+    mongo_db = get_mongo_db()
+    if mongo_db is not None:
+        doc = {
+            "user_id": str(user_id) if user_id else None,
+            "title": title,
+            "student_name": student_name,
+            "domain": domain,
+            "tech_stack": tech_stack,
+            "description": description,
+            "github_url": github_url,
+            "demo_url": demo_url,
+            "upvotes": 0,
+            "upvoted_by": [],
+            "date_added": datetime.utcnow().isoformat()
+        }
+        res = mongo_db["projects"].insert_one(doc)
+        return str(res.inserted_id)
+
+    conn = get_sqlite_connection()
     cursor = conn.cursor()
     cursor.execute('''
         INSERT INTO projects (user_id, title, student_name, domain, tech_stack, description, github_url, demo_url)
@@ -318,9 +490,28 @@ def add_project(title, student_name, domain, tech_stack, description, github_url
 
 def get_projects(domain_filter="All", search_query=""):
     """Retrieves projects based on domain filter and search query, ordered by upvotes."""
-    conn = get_connection()
+    mongo_db = get_mongo_db()
+    if mongo_db is not None:
+        query = {}
+        if domain_filter and domain_filter != "All":
+            query["domain"] = domain_filter
+        if search_query:
+            regex_pat = {"$regex": search_query, "$options": "i"}
+            query["$or"] = [
+                {"title": regex_pat},
+                {"tech_stack": regex_pat},
+                {"description": regex_pat},
+                {"student_name": regex_pat}
+            ]
+        cursor = mongo_db["projects"].find(query).sort([("upvotes", -1), ("date_added", -1)])
+        results = []
+        for doc in cursor:
+            doc["id"] = str(doc["_id"])
+            results.append(doc)
+        return results
+
+    conn = get_sqlite_connection()
     cursor = conn.cursor()
-    
     query = "SELECT * FROM projects WHERE 1=1"
     params = []
     
@@ -334,7 +525,6 @@ def get_projects(domain_filter="All", search_query=""):
         params.extend([search_pattern, search_pattern, search_pattern, search_pattern])
         
     query += " ORDER BY upvotes DESC, date_added DESC"
-    
     cursor.execute(query, params)
     rows = [dict(row) for row in cursor.fetchall()]
     conn.close()
@@ -342,10 +532,38 @@ def get_projects(domain_filter="All", search_query=""):
 
 def toggle_project_upvote(user_id, project_id):
     """Toggles upvote for a user on a project (prevents duplicate voting). Returns (upvoted: bool, new_count: int)."""
-    conn = get_connection()
+    mongo_db = get_mongo_db()
+    if mongo_db is not None:
+        from bson.objectid import ObjectId
+        projects_col = mongo_db["projects"]
+        uid_str = str(user_id)
+        try:
+            proj = projects_col.find_one({"_id": ObjectId(project_id)})
+        except Exception:
+            proj = projects_col.find_one({"id": project_id})
+            
+        if not proj:
+            return False, 0
+            
+        upvoted_by = proj.get("upvoted_by", [])
+        if uid_str in upvoted_by:
+            projects_col.update_one(
+                {"_id": proj["_id"]},
+                {"$pull": {"upvoted_by": uid_str}, "$inc": {"upvotes": -1}}
+            )
+            upvoted = False
+            new_count = max(0, proj.get("upvotes", 1) - 1)
+        else:
+            projects_col.update_one(
+                {"_id": proj["_id"]},
+                {"$addToSet": {"upvoted_by": uid_str}, "$inc": {"upvotes": 1}}
+            )
+            upvoted = True
+            new_count = proj.get("upvotes", 0) + 1
+        return upvoted, new_count
+
+    conn = get_sqlite_connection()
     cursor = conn.cursor()
-    
-    # Check if user already upvoted this project
     cursor.execute("SELECT id FROM project_upvotes WHERE user_id = ? AND project_id = ?", (user_id, project_id))
     existing = cursor.fetchone()
     
@@ -369,7 +587,20 @@ def has_user_upvoted(user_id, project_id):
     """Checks if a given user has upvoted a project."""
     if not user_id:
         return False
-    conn = get_connection()
+        
+    mongo_db = get_mongo_db()
+    if mongo_db is not None:
+        from bson.objectid import ObjectId
+        projects_col = mongo_db["projects"]
+        try:
+            proj = projects_col.find_one({"_id": ObjectId(project_id)})
+        except Exception:
+            proj = projects_col.find_one({"id": project_id})
+        if proj:
+            return str(user_id) in proj.get("upvoted_by", [])
+        return False
+
+    conn = get_sqlite_connection()
     cursor = conn.cursor()
     cursor.execute("SELECT 1 FROM project_upvotes WHERE user_id = ? AND project_id = ?", (user_id, project_id))
     row = cursor.fetchone()
@@ -378,7 +609,16 @@ def has_user_upvoted(user_id, project_id):
 
 def upvote_project(project_id):
     """Legacy helper: increments upvote count for a given project."""
-    conn = get_connection()
+    mongo_db = get_mongo_db()
+    if mongo_db is not None:
+        from bson.objectid import ObjectId
+        try:
+            mongo_db["projects"].update_one({"_id": ObjectId(project_id)}, {"$inc": {"upvotes": 1}})
+        except Exception:
+            mongo_db["projects"].update_one({"id": project_id}, {"$inc": {"upvotes": 1}})
+        return
+
+    conn = get_sqlite_connection()
     cursor = conn.cursor()
     cursor.execute("UPDATE projects SET upvotes = upvotes + 1 WHERE id = ?", (project_id,))
     conn.commit()
@@ -388,7 +628,24 @@ def upvote_project(project_id):
 
 def save_interview_log(role, difficulty, question, user_answer, score, strengths, gaps, user_id=None, username=None):
     """Saves an interview Q&A evaluation entry linked to an optional user."""
-    conn = get_connection()
+    mongo_db = get_mongo_db()
+    if mongo_db is not None:
+        doc = {
+            "user_id": str(user_id) if user_id else None,
+            "username": username,
+            "role": role,
+            "difficulty": difficulty,
+            "question": question,
+            "user_answer": user_answer,
+            "score": score,
+            "strengths": strengths,
+            "gaps": gaps,
+            "timestamp": datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+        }
+        mongo_db["interview_history"].insert_one(doc)
+        return
+
+    conn = get_sqlite_connection()
     cursor = conn.cursor()
     cursor.execute('''
         INSERT INTO interview_history (user_id, username, role, difficulty, question, user_answer, score, strengths, gaps)
@@ -399,7 +656,20 @@ def save_interview_log(role, difficulty, question, user_answer, score, strengths
 
 def get_interview_stats(username=None):
     """Gets aggregate stats for interview module (optionally scoped to a user)."""
-    conn = get_connection()
+    mongo_db = get_mongo_db()
+    if mongo_db is not None:
+        query = {"username": username} if username else {}
+        iv_col = mongo_db["interview_history"]
+        total = iv_col.count_documents(query)
+        if total == 0:
+            return {"total_interviews": 0, "avg_score": 0}
+        
+        pipeline = [{"$match": query}, {"$group": {"_id": None, "avg_score": {"$avg": "$score"}}}]
+        agg = list(iv_col.aggregate(pipeline))
+        avg_score = round(agg[0]["avg_score"], 1) if agg else 0
+        return {"total_interviews": total, "avg_score": avg_score}
+
+    conn = get_sqlite_connection()
     cursor = conn.cursor()
     if username:
         cursor.execute("SELECT COUNT(*) as total_interviews, AVG(score) as avg_score FROM interview_history WHERE username = ?", (username,))
@@ -414,7 +684,12 @@ def get_interview_stats(username=None):
 
 def get_user_interview_history(username, limit=10):
     """Fetches recent interview question evaluations for a specific user."""
-    conn = get_connection()
+    mongo_db = get_mongo_db()
+    if mongo_db is not None:
+        cursor = mongo_db["interview_history"].find({"username": username}).sort("timestamp", -1).limit(limit)
+        return list(cursor)
+
+    conn = get_sqlite_connection()
     cursor = conn.cursor()
     cursor.execute('''
         SELECT role, difficulty, question, user_answer, score, strengths, gaps, timestamp
@@ -431,7 +706,23 @@ def get_user_interview_history(username, limit=10):
 
 def save_resume_scan(filename, target_role, match_score, matched_skills, missing_skills, recommendations, user_id=None, username=None):
     """Saves a resume scan result linked to an optional user."""
-    conn = get_connection()
+    mongo_db = get_mongo_db()
+    if mongo_db is not None:
+        doc = {
+            "user_id": str(user_id) if user_id else None,
+            "username": username,
+            "filename": filename,
+            "target_role": target_role,
+            "match_score": match_score,
+            "matched_skills": matched_skills if isinstance(matched_skills, list) else [],
+            "missing_skills": missing_skills if isinstance(missing_skills, list) else [],
+            "recommendations": recommendations if isinstance(recommendations, list) else [],
+            "timestamp": datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+        }
+        mongo_db["resume_scans"].insert_one(doc)
+        return
+
+    conn = get_sqlite_connection()
     cursor = conn.cursor()
     cursor.execute('''
         INSERT INTO resume_scans (user_id, username, filename, target_role, match_score, matched_skills, missing_skills, recommendations)
@@ -451,7 +742,20 @@ def save_resume_scan(filename, target_role, match_score, matched_skills, missing
 
 def get_resume_stats(username=None):
     """Gets aggregate stats for resume scans (optionally scoped to a user)."""
-    conn = get_connection()
+    mongo_db = get_mongo_db()
+    if mongo_db is not None:
+        query = {"username": username} if username else {}
+        res_col = mongo_db["resume_scans"]
+        total = res_col.count_documents(query)
+        if total == 0:
+            return {"total_scans": 0, "avg_score": 0}
+        
+        pipeline = [{"$match": query}, {"$group": {"_id": None, "avg_score": {"$avg": "$match_score"}}}]
+        agg = list(res_col.aggregate(pipeline))
+        avg_score = round(agg[0]["avg_score"], 1) if agg else 0
+        return {"total_scans": total, "avg_score": avg_score}
+
+    conn = get_sqlite_connection()
     cursor = conn.cursor()
     if username:
         cursor.execute("SELECT COUNT(*) as total_scans, AVG(match_score) as avg_score FROM resume_scans WHERE username = ?", (username,))
@@ -466,7 +770,12 @@ def get_resume_stats(username=None):
 
 def get_user_resume_scans(username, limit=10):
     """Fetches past resume scans for a specific user."""
-    conn = get_connection()
+    mongo_db = get_mongo_db()
+    if mongo_db is not None:
+        cursor = mongo_db["resume_scans"].find({"username": username}).sort("timestamp", -1).limit(limit)
+        return list(cursor)
+
+    conn = get_sqlite_connection()
     cursor = conn.cursor()
     cursor.execute('''
         SELECT filename, target_role, match_score, matched_skills, missing_skills, recommendations, timestamp
@@ -496,4 +805,4 @@ def get_user_resume_scans(username, limit=10):
 
 if __name__ == "__main__":
     init_db()
-    print("Database initialized successfully with Capstone Schema and Demo Users.")
+    print(f"Backend initialized. MongoDB Active: {is_using_mongodb()}")
