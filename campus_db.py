@@ -14,14 +14,33 @@ try:
 except ImportError:
     HAS_PYMONGO = False
 
+# Auto-load .env if available
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
+
 # --- Configuration & Paths ---
 DB_PATH = os.path.join(os.path.dirname(__file__), "campus_hub.db")
-MONGODB_URI = os.getenv("MONGODB_URI", "").strip()
 
 # Global MongoDB references
 _mongo_client = None
 _mongo_db = None
 _IS_USING_MONGO = False
+
+def get_mongo_uri() -> str:
+    """Retrieves the MongoDB URI from environment variables or Streamlit secrets."""
+    uri = os.getenv("MONGODB_URI", "").strip()
+    if uri:
+        return uri
+    try:
+        import streamlit as st
+        if hasattr(st, "secrets") and "MONGODB_URI" in st.secrets:
+            return str(st.secrets["MONGODB_URI"]).strip()
+    except Exception:
+        pass
+    return ""
 
 # --- Password Security (PBKDF2-HMAC-SHA256) ---
 
@@ -46,16 +65,20 @@ def verify_password(password: str, stored_hash: str) -> bool:
 def get_mongo_db():
     """Attempts to connect to MongoDB Atlas if MONGODB_URI is provided."""
     global _mongo_client, _mongo_db, _IS_USING_MONGO
-    if not HAS_PYMONGO or not MONGODB_URI:
+    if not HAS_PYMONGO:
         return None
 
     if _mongo_db is not None:
         return _mongo_db
 
+    uri = get_mongo_uri()
+    if not uri:
+        return None
+
     try:
         ca_file = certifi.where() if 'certifi' in globals() else None
         _mongo_client = MongoClient(
-            MONGODB_URI,
+            uri,
             tlsCAFile=ca_file,
             serverSelectionTimeoutMS=5000
         )
@@ -71,6 +94,8 @@ def get_mongo_db():
 
 def is_using_mongodb():
     """Returns True if the backend is currently connected to MongoDB Atlas."""
+    if _mongo_db is None:
+        get_mongo_db()
     return _IS_USING_MONGO
 
 def get_sqlite_connection():

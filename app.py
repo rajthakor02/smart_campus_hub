@@ -15,6 +15,7 @@ load_dotenv()
 
 from campus_db import (
     init_db,
+    is_using_mongodb,
     get_projects,
     get_interview_stats,
     get_resume_stats,
@@ -473,6 +474,22 @@ with st.sidebar:
         selected_menu = st.radio("Choose Module", menu_options, index=_default_index, label_visibility="collapsed")
 
     st.markdown("---")
+    
+    # Capstone Backend Status Indicator
+    if is_using_mongodb():
+        st.markdown("""
+            <div style="font-size: 0.78rem; color: #34D399; display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-radius: 8px; background: rgba(16, 185, 129, 0.1); border: 1px solid rgba(16, 185, 129, 0.25);">
+                <span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:#10B981; box-shadow: 0 0 8px #10B981;"></span>
+                <span><strong>Database:</strong> MongoDB Atlas Cloud</span>
+            </div>
+        """, unsafe_allow_html=True)
+    else:
+        st.markdown("""
+            <div style="font-size: 0.78rem; color: #9BA3AC; display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-radius: 8px; background: rgba(255, 255, 255, 0.04); border: 1px solid rgba(255, 255, 255, 0.08);">
+                <span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:#9BA3AC;"></span>
+                <span><strong>Database:</strong> SQLite Local</span>
+            </div>
+        """, unsafe_allow_html=True)
 
 # Main Header Global / Personal Statistics Bar
 def render_header_stats(user=None):
