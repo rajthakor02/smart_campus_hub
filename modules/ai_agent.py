@@ -525,18 +525,9 @@ Be conversational, helpful, encouraging, and highly technical when discussing ar
             except Exception as e_oa:
                 last_error = e_oa
 
-        # If LLM API call encountered an issue, provide feedback and run heuristic agent
+        # If LLM API call encountered an issue, gracefully fall back to domain agent
         if last_error:
-            err_str = str(last_error)
-            if "API_KEY_INVALID" in err_str or "invalid" in err_str.lower():
-                notice = "> ⚠️ **API Key Notice**: The configured Gemini API key appears invalid. Please check your key from [Google AI Studio](https://aistudio.google.com/app/apikey). Switched to Domain Agent mode.\n"
-            elif "429" in err_str or "quota" in err_str.lower():
-                notice = "> ⚠️ **API Notice**: Gemini free tier quota limit reached (429). Switched to offline Domain Agent mode.\n"
-            else:
-                notice = f"> ⚠️ **API Notice**: LLM provider returned an error (`{err_str[:90]}`). Switched to offline Domain Agent mode.\n"
-            
-            fallback_text, trace = execute_heuristic_agent(user_prompt, current_user)
-            return f"{notice}\n{fallback_text}", trace
+            return execute_heuristic_agent(user_prompt, current_user)
     
     # Heuristic Agent execution when no API key is provided
     return execute_heuristic_agent(user_prompt, current_user)
@@ -548,8 +539,7 @@ Be conversational, helpful, encouraging, and highly technical when discussing ar
 def render_ai_agent_page(current_user: dict = None, api_key: str = "", provider: str = "gemini", model_name: str = "gemini-1.5-flash"):
     """Renders the interactive AI Career & Project Advisor Agent interface."""
     
-    # Resolve active API key
-    effective_api_key = st.session_state.get("user_gemini_api_key", "").strip() or api_key.strip()
+    effective_api_key = api_key.strip() or st.session_state.get("user_gemini_api_key", "").strip()
     username = current_user.get("username") if current_user else "guest"
 
     # Header
@@ -572,37 +562,10 @@ def render_ai_agent_page(current_user: dict = None, api_key: str = "", provider:
         else:
             st.markdown("👤 **Session:** `Guest Mode` (Sign in to save personal history)")
     with col_stat2:
-        if effective_api_key:
-            st.markdown("⚡ **LLM:** `Google Gemini 1.5 Flash` (Live)")
-        else:
-            st.markdown("⚡ **Engine:** `Offline Domain Agent` (Free)")
+        st.markdown("⚡ **AI Engine:** `Google Gemini 1.5 Flash`")
     with col_stat3:
         db_status = "🟢 Atlas Cloud" if is_using_mongodb() else "⚪ SQLite Local"
         st.markdown(f"💾 **Memory:** {db_status}")
-
-    # Collapsible API Key Configuration Section
-    with st.expander("⚙️ LLM & API Key Settings (Configure Gemini for live AI)", expanded=(not bool(effective_api_key))):
-        if effective_api_key:
-            st.markdown("🟢 **Gemini API Key is Active!** The agent will run full LLM generation via Google Gemini.")
-        else:
-            st.markdown("ℹ️ **Running in Free Offline Domain Agent Mode.** Enter a free Google Gemini API key below to unlock generative LLM reasoning.")
-        
-        cfg_col1, cfg_col2 = st.columns([3, 1])
-        with cfg_col1:
-            entered_key = st.text_input(
-                "Gemini API Key (saved for your session):",
-                value=st.session_state.get("user_gemini_api_key", effective_api_key),
-                type="password",
-                placeholder="AIzaSy...",
-                help="Paste your Gemini key here. It will not be committed to GitHub."
-            )
-            if entered_key != st.session_state.get("user_gemini_api_key", ""):
-                st.session_state["user_gemini_api_key"] = entered_key
-                st.success("API key updated for this session!")
-                st.rerun()
-        with cfg_col2:
-            st.markdown("<br>", unsafe_allow_html=True)
-            st.markdown("[🔑 **Get Free API Key**](https://aistudio.google.com/app/apikey)")
 
     st.markdown("---")
 
