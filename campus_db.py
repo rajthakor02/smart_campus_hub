@@ -42,6 +42,41 @@ def get_mongo_uri() -> str:
         pass
     return ""
 
+def get_gemini_api_key() -> str:
+    """Safely retrieves the Gemini/Google API key from session state, env, or Streamlit secrets."""
+    try:
+        import streamlit as st
+        if hasattr(st, "session_state") and st.session_state.get("user_gemini_api_key"):
+            return str(st.session_state["user_gemini_api_key"]).strip()
+        if hasattr(st, "secrets"):
+            for key_name in ["GEMINI_API_KEY", "GOOGLE_API_KEY", "gemini_api_key", "google_api_key"]:
+                if key_name in st.secrets and st.secrets[key_name]:
+                    return str(st.secrets[key_name]).strip()
+    except Exception:
+        pass
+
+    for env_name in ["GEMINI_API_KEY", "GOOGLE_API_KEY"]:
+        val = os.getenv(env_name, "").strip()
+        if val:
+            return val
+
+    return ""
+
+def get_openai_api_key() -> str:
+    """Safely retrieves the OpenAI API key from session state, env, or Streamlit secrets."""
+    try:
+        import streamlit as st
+        if hasattr(st, "session_state") and st.session_state.get("user_openai_api_key"):
+            return str(st.session_state["user_openai_api_key"]).strip()
+        if hasattr(st, "secrets"):
+            for key_name in ["OPENAI_API_KEY", "openai_api_key"]:
+                if key_name in st.secrets and st.secrets[key_name]:
+                    return str(st.secrets[key_name]).strip()
+    except Exception:
+        pass
+
+    return os.getenv("OPENAI_API_KEY", "").strip()
+
 # --- Password Security (PBKDF2-HMAC-SHA256) ---
 
 def hash_password(password: str) -> str:

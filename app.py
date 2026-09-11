@@ -31,6 +31,8 @@ from campus_db import (
     save_agent_message,
     get_agent_history,
     clear_agent_history,
+    get_gemini_api_key,
+    get_openai_api_key,
 )
 
 # Initialize Database
@@ -706,25 +708,40 @@ elif selected_menu == "My Profile":
         render_auth_page()
 
 elif selected_menu == "AI Career Agent":
+    gemini_key = get_gemini_api_key()
+    openai_key = get_openai_api_key()
+    provider = "openai" if (openai_key and not gemini_key) else "gemini"
+    active_key = openai_key if provider == "openai" else gemini_key
+
     render_ai_agent_page(
         current_user=current_user,
-        api_key=os.getenv("GEMINI_API_KEY", ""),
-        provider="gemini",
+        api_key=active_key,
+        provider=provider,
         model_name=os.getenv("GEMINI_MODEL", "gemini-1.5-flash")
     )
 
 elif selected_menu == "Resume Parser":
+    gemini_key = get_gemini_api_key()
+    openai_key = get_openai_api_key()
+    provider = "openai" if (openai_key and not gemini_key) else "gemini"
+    active_key = openai_key if provider == "openai" else gemini_key
+
     render_resume_parser_page(
-        api_key=os.getenv("GEMINI_API_KEY", ""),
-        provider="gemini",
+        api_key=active_key,
+        provider=provider,
         model_name=os.getenv("GEMINI_MODEL", "gemini-1.5-flash"),
         current_user=current_user
     )
 
 elif selected_menu == "AI Mock Interview":
+    gemini_key = get_gemini_api_key()
+    openai_key = get_openai_api_key()
+    provider = "openai" if (openai_key and not gemini_key) else "gemini"
+    active_key = openai_key if provider == "openai" else gemini_key
+
     render_mock_interview_page(
-        api_key=os.getenv("GEMINI_API_KEY", ""),
-        provider="gemini",
+        api_key=active_key,
+        provider=provider,
         model_name=os.getenv("GEMINI_MODEL", "gemini-1.5-flash"),
         current_user=current_user
     )
