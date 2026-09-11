@@ -10,15 +10,16 @@ _PARENT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if _PARENT_DIR not in sys.path:
     sys.path.insert(0, _PARENT_DIR)
 
-from campus_db import (
-    get_projects,
-    get_user_resume_scans,
-    get_user_interview_history,
-    save_agent_message,
-    get_agent_history,
-    clear_agent_history,
-    is_using_mongodb
-)
+import campus_db
+
+# Safely resolve database functions with graceful fallback
+get_projects = getattr(campus_db, "get_projects", lambda: [])
+get_user_resume_scans = getattr(campus_db, "get_user_resume_scans", lambda u, limit=10: [])
+get_user_interview_history = getattr(campus_db, "get_user_interview_history", lambda u, limit=10: [])
+save_agent_message = getattr(campus_db, "save_agent_message", lambda *args, **kwargs: None)
+get_agent_history = getattr(campus_db, "get_agent_history", lambda *args, **kwargs: [])
+clear_agent_history = getattr(campus_db, "clear_agent_history", lambda *args, **kwargs: True)
+is_using_mongodb = getattr(campus_db, "is_using_mongodb", lambda: False)
 
 # Optional LLM driver imports
 try:

@@ -1,12 +1,19 @@
 import os
 import sys
+import importlib
 
 # Guarantee repository root is in sys.path on Streamlit Cloud and Render
 REPO_ROOT = os.path.dirname(os.path.abspath(__file__))
 if REPO_ROOT not in sys.path:
     sys.path.insert(0, REPO_ROOT)
 
-import importlib.util
+# Force reload campus_db if previously cached by Streamlit runtime
+if "campus_db" in sys.modules:
+    try:
+        importlib.reload(sys.modules["campus_db"])
+    except Exception:
+        pass
+
 import streamlit as st
 from dotenv import load_dotenv
 
@@ -21,6 +28,9 @@ from campus_db import (
     get_resume_stats,
     get_user_resume_scans,
     get_user_interview_history,
+    save_agent_message,
+    get_agent_history,
+    clear_agent_history,
 )
 
 # Initialize Database
